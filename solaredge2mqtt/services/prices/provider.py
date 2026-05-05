@@ -97,13 +97,15 @@ class PriceProvider:
             return fallback
         return PriceView(cached[0], cached[1])
 
-    async def _initial_fetch(self, _: IntervalBaseTriggerEvent) -> None:
+    async def _initial_fetch(self, event: IntervalBaseTriggerEvent) -> None:
+        del event
         if self._initialized:
             return
         self._initialized = True
         await self._fetch_window(_today_local(), _today_local() + timedelta(days=2))
 
-    async def _maybe_daily_fetch(self, _: Interval15MinTriggerEvent) -> None:
+    async def _maybe_daily_fetch(self, event: Interval15MinTriggerEvent) -> None:
+        del event
         now_local = datetime.now(tz=LOCAL_TZ)
         source = self.settings.source.entsoe
         if source is None:

@@ -42,7 +42,7 @@ class EntsoeClient:
         self, period_start: datetime, period_end: datetime
     ) -> dict[datetime, float]:
         """Fetch hourly day-ahead spot prices in EUR/MWh, keyed by UTC hour."""
-        params = {
+        params: dict[str, str | int | float] = {
             "securityToken": self.settings.api_token,
             "documentType": DOCUMENT_TYPE_DAY_AHEAD,
             "in_Domain": self.settings.area,
@@ -56,6 +56,10 @@ class EntsoeClient:
         )
         if body is None:
             raise EntsoePricesUnavailableError("ENTSO-E request returned no body")
+        if not isinstance(body, str):
+            raise EntsoePricesUnavailableError(
+                f"Unexpected ENTSO-E response type: {type(body).__name__}"
+            )
 
         return parse_day_ahead_xml(body)
 

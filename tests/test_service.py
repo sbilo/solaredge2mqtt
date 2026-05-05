@@ -24,7 +24,7 @@ def _build_service() -> Service:
     service.powerflow = cast(Any, None)
     service.monitoring = None
     service.weather = None
-    service.prices = None
+    service.prices = cast(Any, None)
     return service
 
 
@@ -693,7 +693,7 @@ class TestServiceShutdown:
         service.powerflow = cast(Any, None)
         service.monitoring = None
         service.weather = None
-        service.prices = None
+        service.prices = cast(Any, None)
 
         with (
             patch(

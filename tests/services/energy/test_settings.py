@@ -126,10 +126,10 @@ class TestPriceSourceSettings:
             consumption=0.30,
             delivery=0.08,
             currency="EUR",
-            source={
-                "type": "entsoe",
-                "entsoe": {"api_token": "secret"},
-            },
+            source=PriceSourceSettings(
+                type=PriceSourceType.ENTSOE,
+                entsoe=EntsoePriceSourceSettings(api_token="secret"),
+            ),
         )
 
         assert settings.is_dynamic is True
@@ -140,10 +140,10 @@ class TestPriceSourceSettings:
     def test_entsoe_dynamic_is_configured_only_needs_currency(self):
         settings = PriceSettings(
             currency="EUR",
-            source={
-                "type": "entsoe",
-                "entsoe": {"api_token": "secret"},
-            },
+            source=PriceSourceSettings(
+                type=PriceSourceType.ENTSOE,
+                entsoe=EntsoePriceSourceSettings(api_token="secret"),
+            ),
         )
 
         # No static prices set, but dynamic source covers consumption + delivery.
