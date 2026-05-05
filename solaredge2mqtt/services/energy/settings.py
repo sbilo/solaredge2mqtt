@@ -31,6 +31,16 @@ class EntsoePriceSourceSettings(BaseModel):
 
     fetch_hour: int = Field(default=14, ge=0, le=23)
 
+    backfill_days: int = Field(
+        default=0,
+        ge=0,
+        le=365,
+        description=(
+            "On startup, fetch this many days of historical day-ahead prices "
+            "and recompute the energy money_* fields for the same window."
+        ),
+    )
+
     energy_tax_in: float = Field(default=0.0)
     energy_tax_out: float = Field(default=0.0)
     markup_in: float = Field(default=0.0)

@@ -84,6 +84,30 @@ class InfluxDBAsync:
     def buckets_api(self) -> BucketsApi:
         return self.client_sync.buckets_api()
 
+    async def recompute_money_window(
+        self,
+        hours: int,
+        price_in_default: float,
+        price_out_default: float,
+    ) -> None:
+        """One-shot recompute of money_* fields over the past ``hours``.
+
+        Used for historical backfill. Joins the existing ``energy`` series
+        with the ``prices`` series so it works even when raw powerflow data
+        has aged out of retention.
+        """
+        if hours <= 0:
+            return
+        query = self._get_flux_query(
+            "recompute_money_window",
+            {
+                "LOOKBACK_HOURS": hours,
+                "PRICE_IN_DEFAULT": price_in_default,
+                "PRICE_OUT_DEFAULT": price_out_default,
+            },
+        )
+        await self.query_api.query(query)
+
     async def loop(self, event: Interval10MinTriggerEvent) -> None:
         now = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
 

@@ -103,7 +103,40 @@ class PriceProvider:
             return
         self._initialized = True
         today = _today_local()
-        await self._fetch_days([today, today + timedelta(days=1)])
+
+        source = self.settings.source.entsoe
+        backfill = source.backfill_days if source else 0
+
+        first_day = today - timedelta(days=backfill)
+        last_day = today + timedelta(days=1)  # also pull tomorrow if available
+        days = [
+            first_day + timedelta(days=i)
+            for i in range((last_day - first_day).days + 1)
+        ]
+
+        any_success = await self._fetch_days(days)
+
+        if backfill > 0 and any_success and self.influxdb is not None:
+            # Recompute money_* for the full backfill window so existing
+            # energy points pick up the freshly-ingested per-hour prices.
+            hours = (backfill + 1) * 24
+            try:
+                await self.influxdb.recompute_money_window(
+                    hours=hours,
+                    price_in_default=self.settings.price_in,
+                    price_out_default=self.settings.price_out,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Money-field recompute over {hours}h failed: {exc}",
+                    hours=hours,
+                    exc=exc,
+                )
+            else:
+                logger.info(
+                    "Recomputed money_* fields over the past {hours}h",
+                    hours=hours,
+                )
 
     async def _maybe_daily_fetch(self, event: Interval15MinTriggerEvent) -> None:
         del event
