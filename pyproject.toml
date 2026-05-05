@@ -81,7 +81,7 @@ py-modules = ["migrate_config"]
 [tool.setuptools_scm]
 version_scheme = "post-release"
 local_scheme = "node-and-date"
-fallback_version = "0.0.0.unknown"
+fallback_version = "0.0.0+unknown"
 
 [tool.ruff]
 line-length = 88
