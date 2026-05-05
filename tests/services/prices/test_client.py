@@ -71,7 +71,36 @@ def test_parse_sparse_points_carries_forward_last_price():
         assert prices[hour] == pytest.approx(value)
 
 
-def test_parse_skips_non_hourly_resolution():
+def test_parse_aggregates_15min_to_hourly_average():
+    # NL day-ahead moved to PT15M MTUs in 2025; we average the four
+    # quarter-hour points back to a single hourly value.
+    points = "".join(
+        _point(i + 1, value)
+        for i, value in enumerate([100.0, 110.0, 120.0, 130.0,  # hour 0 → 115
+                                   200.0, 210.0, 220.0, 230.0])  # hour 1 → 215
+    )
+    body = f"""<?xml version=\"1.0\"?>
+<Publication_MarketDocument xmlns=\"{_NS}\">
+  <TimeSeries>
+    <Period>
+      <timeInterval>
+        <start>2026-04-29T22:00Z</start><end>2026-04-30T00:00Z</end>
+      </timeInterval>
+      <resolution>PT15M</resolution>
+      {points}
+    </Period>
+  </TimeSeries>
+</Publication_MarketDocument>"""
+
+    prices = parse_day_ahead_xml(body)
+
+    h0 = datetime(2026, 4, 29, 22, tzinfo=timezone.utc)
+    h1 = datetime(2026, 4, 29, 23, tzinfo=timezone.utc)
+    assert prices[h0] == pytest.approx(115.0)
+    assert prices[h1] == pytest.approx(215.0)
+
+
+def test_parse_skips_unsupported_resolution():
     body = """<?xml version=\"1.0\"?>
 <Publication_MarketDocument xmlns=\"urn:x\">
   <TimeSeries>
@@ -79,7 +108,7 @@ def test_parse_skips_non_hourly_resolution():
       <timeInterval>
         <start>2026-04-29T22:00Z</start><end>2026-04-29T23:00Z</end>
       </timeInterval>
-      <resolution>PT15M</resolution>
+      <resolution>PT5M</resolution>
       <Point><position>1</position><price.amount>1.0</price.amount></Point>
     </Period>
   </TimeSeries>

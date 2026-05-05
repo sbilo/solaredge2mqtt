@@ -23,7 +23,15 @@ from solaredge2mqtt.services.http_async import HTTPClientAsync
 
 ENTSOE_URL = "https://web-api.tp.entsoe.eu/api"
 DOCUMENT_TYPE_DAY_AHEAD = "A44"
-RESOLUTION_HOURLY = "PT60M"
+
+# Sub-hourly resolutions are aggregated to the hour by averaging — most NL/EU
+# day-ahead bidding zones moved to 15-minute MTUs in 2025, but consumer-side
+# dynamic suppliers (Frank, Tibber, ...) still bill per hour.
+_RESOLUTION_MINUTES: dict[str, int] = {
+    "PT15M": 15,
+    "PT30M": 30,
+    "PT60M": 60,
+}
 
 
 class EntsoePricesUnavailableError(RuntimeError):
@@ -89,12 +97,13 @@ def parse_day_ahead_xml(body: str) -> dict[datetime, float]:
             f"ENTSO-E acknowledgement {reason_code}: {reason_text or 'no detail'}"
         )
 
-    prices: dict[datetime, float] = {}
+    hourly_buckets: dict[datetime, list[float]] = {}
 
     for time_series in _iter_local(root, "TimeSeries"):
         for period in _iter_local(time_series, "Period"):
-            resolution = _find_text(period, "resolution")
-            if resolution != RESOLUTION_HOURLY:
+            resolution = _find_text(period, "resolution") or ""
+            slot_minutes = _RESOLUTION_MINUTES.get(resolution)
+            if slot_minutes is None:
                 logger.debug(
                     "Skipping ENTSO-E period with unsupported resolution {res}",
                     res=resolution,
@@ -131,13 +140,16 @@ def parse_day_ahead_xml(body: str) -> dict[datetime, float]:
                     last_price = float(point_map[position])
                 if last_price is None:
                     continue
-                hour = period_start + timedelta(hours=position - 1)
-                prices[hour] = last_price
+                slot_start = period_start + timedelta(
+                    minutes=slot_minutes * (position - 1)
+                )
+                hour = slot_start.replace(minute=0, second=0, microsecond=0)
+                hourly_buckets.setdefault(hour, []).append(last_price)
 
-    if not prices:
+    if not hourly_buckets:
         raise EntsoePricesUnavailableError("No hourly prices in ENTSO-E response")
 
-    return prices
+    return {hour: sum(values) / len(values) for hour, values in hourly_buckets.items()}
 
 
 def _iter_local(element: ET.Element, tag: str) -> Iterable[ET.Element]:
