@@ -69,7 +69,7 @@ def test_ingest_applies_markup_tax_vat():
 
 
 @pytest.mark.asyncio
-async def test_fetch_window_writes_points_and_emits_event():
+async def test_fetch_days_writes_points_and_emits_event():
     influxdb = MagicMock()
     influxdb.write_points = AsyncMock()
     event_bus = MagicMock()
@@ -83,8 +83,9 @@ async def test_fetch_window_writes_points_and_emits_event():
     provider._client = MagicMock()
     provider._client.fetch_day_ahead = AsyncMock(return_value={hour: 100.0})
 
-    await provider._fetch_window(hour.date(), hour.date())
+    success = await provider._fetch_days([hour.date()])
 
+    assert success is True
     influxdb.write_points.assert_awaited_once()
     written = influxdb.write_points.call_args.args[0]
     assert len(written) == 1
@@ -92,3 +93,30 @@ async def test_fetch_window_writes_points_and_emits_event():
     event_bus.emit.assert_awaited()
     last_event = event_bus.emit.await_args_list[-1].args[0]
     assert last_event.hours == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_days_partial_success_when_tomorrow_unavailable():
+    """Today's prices land even when tomorrow returns Acknowledgement."""
+    from solaredge2mqtt.services.prices.client import EntsoePricesUnavailableError
+
+    event_bus = MagicMock()
+    event_bus.emit = AsyncMock()
+    provider = PriceProvider(PriceSettings(**ENTSOE_DYNAMIC), event_bus=event_bus)
+
+    today = datetime(2026, 4, 29, 22, tzinfo=timezone.utc)
+
+    async def fake_fetch(start, end):
+        if start.date() == today.date():
+            return {today: 100.0}
+        raise EntsoePricesUnavailableError("ack 999: No matching data found")
+
+    provider._client = MagicMock()
+    provider._client.fetch_day_ahead = AsyncMock(side_effect=fake_fetch)
+
+    from datetime import timedelta as _td
+
+    success = await provider._fetch_days([today.date(), today.date() + _td(days=1)])
+
+    assert success is True
+    assert today in provider._cache

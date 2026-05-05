@@ -81,6 +81,14 @@ def parse_day_ahead_xml(body: str) -> dict[datetime, float]:
     except ET.ParseError as exc:
         raise InvalidDataException(f"ENTSO-E XML parse error: {exc}") from exc
 
+    root_tag = _strip_ns(root.tag)
+    if root_tag == "Acknowledgement_MarketDocument":
+        reason_code = _find_text(root, "code") or "?"
+        reason_text = (_find_text(root, "text") or "").strip()
+        raise EntsoePricesUnavailableError(
+            f"ENTSO-E acknowledgement {reason_code}: {reason_text or 'no detail'}"
+        )
+
     prices: dict[datetime, float] = {}
 
     for time_series in _iter_local(root, "TimeSeries"):

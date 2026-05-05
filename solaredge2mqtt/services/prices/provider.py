@@ -102,7 +102,8 @@ class PriceProvider:
         if self._initialized:
             return
         self._initialized = True
-        await self._fetch_window(_today_local(), _today_local() + timedelta(days=2))
+        today = _today_local()
+        await self._fetch_days([today, today + timedelta(days=1)])
 
     async def _maybe_daily_fetch(self, event: Interval15MinTriggerEvent) -> None:
         del event
@@ -115,34 +116,53 @@ class PriceProvider:
         today = now_local.date()
         if self._last_fetch_date == today:
             return
-        await self._fetch_window(today, today + timedelta(days=2))
+        if await self._fetch_days([today, today + timedelta(days=1)]):
+            self._last_fetch_date = today
 
-    async def _fetch_window(self, start_local: date, end_local: date) -> None:
+    async def _fetch_days(self, days: list[date]) -> bool:
+        """Fetch each day independently. Returns True if any day succeeded.
+
+        Day-ahead prices for tomorrow are typically published around 12:45 CET,
+        so before that ENTSO-E will return an Acknowledgement document for any
+        window that includes tomorrow. Fetching one day at a time lets today's
+        prices land even when tomorrow's are still unavailable.
+        """
         assert self._client is not None
-        period_start = _local_midnight_utc(start_local)
-        period_end = _local_midnight_utc(end_local)
+        any_success = False
+        for day in days:
+            period_start = _local_midnight_utc(day)
+            period_end = _local_midnight_utc(day + timedelta(days=1))
+            try:
+                spot = await self._client.fetch_day_ahead(period_start, period_end)
+            except EntsoePricesUnavailableError as exc:
+                logger.info(
+                    "ENTSO-E has no day-ahead prices yet for {day}: {exc}",
+                    day=day,
+                    exc=exc,
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ENTSO-E day-ahead fetch failed for {day}: {exc}",
+                    day=day,
+                    exc=exc,
+                )
+                continue
 
-        try:
-            spot = await self._client.fetch_day_ahead(period_start, period_end)
-        except EntsoePricesUnavailableError as exc:
-            logger.warning("ENTSO-E day-ahead fetch returned no data: {exc}", exc=exc)
-            return
-        except Exception as exc:  # noqa: BLE001 — log and survive transient API errors
-            logger.warning("ENTSO-E day-ahead fetch failed: {exc}", exc=exc)
-            return
+            ingested = self._ingest_spot(spot)
+            if self.influxdb is not None and ingested:
+                await self._write_points(ingested)
+            await self.event_bus.emit(
+                PricesUpdatedEvent(datetime.now(tz=timezone.utc), len(ingested))
+            )
+            logger.info(
+                "ENTSO-E prices ingested for {day}: {count} hourly slots",
+                day=day,
+                count=len(ingested),
+            )
+            any_success = True
 
-        ingested = self._ingest_spot(spot)
-        self._last_fetch_date = datetime.now(tz=LOCAL_TZ).date()
-
-        if self.influxdb is not None and ingested:
-            await self._write_points(ingested)
-
-        await self.event_bus.emit(
-            PricesUpdatedEvent(datetime.now(tz=timezone.utc), len(ingested))
-        )
-        logger.info(
-            "ENTSO-E prices ingested: {count} hourly slots", count=len(ingested)
-        )
+        return any_success
 
     def _ingest_spot(
         self, spot_eur_per_mwh: dict[datetime, float]
