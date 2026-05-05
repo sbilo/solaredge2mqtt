@@ -337,11 +337,62 @@ influxdb_token: "your_influxdb_token_with_full_access"
 
 Calculate savings and earnings by specifying energy costs. Requires InfluxDB.
 
+#### Static prices (default)
+
 ```yaml
 prices:
+  currency: EUR
   consumption: 0.30  # Price paid per kWh from grid
   delivery: 0.08     # Price received per kWh delivered to grid
 ```
+
+#### Dynamic day-ahead prices (ENTSO-E)
+
+For users on a dynamic-pricing contract, the service can fetch hourly
+day-ahead prices once per day from the [ENTSO-E Transparency Platform][entsoe]
+and apply them per hour during aggregation. The `consumption` and `delivery`
+fields above are kept as a fallback for hours where no published price is
+available yet.
+
+```yaml
+prices:
+  currency: EUR
+  consumption: 0.30        # static fallback (used when no day-ahead row exists)
+  delivery: 0.08
+  source:
+    type: entsoe
+    entsoe:
+      api_token: !secret entsoe_token
+      area: 10YNL----------L     # ENTSO-E EIC bidding-zone code (default: NL)
+      fetch_hour: 14             # local hour to pull next-day prices
+      energy_tax_in: 0.13165     # EUR/kWh added to spot for consumption
+      energy_tax_out: 0.0        # EUR/kWh added to spot for delivery
+      markup_in: 0.02            # supplier markup EUR/kWh on consumption
+      markup_out: 0.0            # supplier markup EUR/kWh on delivery
+      vat_in: 0.21               # VAT fraction (e.g. 0.21 for 21%)
+      vat_out: 0.0               # VAT fraction on delivery (often 0)
+```
+
+Final per-hour prices are derived from the raw spot (EUR/MWh → EUR/kWh) as:
+
+    price_in  = (spot + energy_tax_in  + markup_in)  * (1 + vat_in)
+    price_out = (spot + energy_tax_out + markup_out) * (1 + vat_out)
+
+Request a free ENTSO-E API token by emailing
+`transparency@entsoe.eu` with the subject *Restful API access*.
+
+Add the token to `secrets.yml`:
+
+```yaml
+# secrets.yml
+entsoe_token: "your_entsoe_api_token"
+```
+
+Resolved prices are written to InfluxDB as a `prices` measurement with
+`spot`, `price_in`, and `price_out` fields, so dashboards can plot them
+alongside the existing `money_*` series.
+
+[entsoe]: https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
 
 ### Weather
 

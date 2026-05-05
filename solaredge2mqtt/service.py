@@ -22,6 +22,7 @@ from solaredge2mqtt.services.homeassistant.service import (
 )
 from solaredge2mqtt.services.monitoring import MonitoringSite
 from solaredge2mqtt.services.powerflow import PowerflowService
+from solaredge2mqtt.services.prices import PriceProvider
 from solaredge2mqtt.services.weather import WeatherClient
 
 LOCAL_TZ = get_localzone_name()
@@ -62,6 +63,10 @@ class Service:
             InfluxDBAsync(self.settings.influxdb, self.settings.prices, self.event_bus)
             if self.settings.influxdb.is_configured
             else None
+        )
+
+        self.prices: PriceProvider = PriceProvider(
+            self.settings.prices, self.event_bus, self.influxdb
         )
 
         self.energy: EnergyService | None = (
@@ -264,6 +269,7 @@ class Service:
                             self.powerflow,
                             self.monitoring,
                             self.weather,
+                            self.prices,
                         ]
                         if service
                     ]

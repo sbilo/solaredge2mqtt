@@ -2,7 +2,13 @@
 
 import pytest
 
-from solaredge2mqtt.services.energy.settings import EnergySettings, PriceSettings
+from solaredge2mqtt.services.energy.settings import (
+    EnergySettings,
+    EntsoePriceSourceSettings,
+    PriceSettings,
+    PriceSourceSettings,
+    PriceSourceType,
+)
 
 
 class TestPriceSettings:
@@ -99,6 +105,53 @@ class TestPriceSettings:
         settings = PriceSettings()
 
         assert settings.price_out == pytest.approx(0.0)
+
+
+class TestPriceSourceSettings:
+    """Tests for the price-source configuration block."""
+
+    def test_default_is_static(self):
+        settings = PriceSettings()
+
+        assert settings.source.type == PriceSourceType.STATIC
+        assert settings.source.entsoe is None
+        assert settings.is_dynamic is False
+
+    def test_entsoe_requires_entsoe_block(self):
+        with pytest.raises(ValueError, match="entsoe is not configured"):
+            PriceSourceSettings(type=PriceSourceType.ENTSOE)
+
+    def test_entsoe_source_marks_dynamic(self):
+        settings = PriceSettings(
+            consumption=0.30,
+            delivery=0.08,
+            currency="EUR",
+            source={
+                "type": "entsoe",
+                "entsoe": {"api_token": "secret"},
+            },
+        )
+
+        assert settings.is_dynamic is True
+        assert settings.source.entsoe is not None
+        assert settings.source.entsoe.fetch_hour == 14
+        assert settings.source.entsoe.area == "10YNL----------L"
+
+    def test_entsoe_dynamic_is_configured_only_needs_currency(self):
+        settings = PriceSettings(
+            currency="EUR",
+            source={
+                "type": "entsoe",
+                "entsoe": {"api_token": "secret"},
+            },
+        )
+
+        # No static prices set, but dynamic source covers consumption + delivery.
+        assert settings.is_configured is True
+
+    def test_entsoe_settings_validate_fetch_hour_range(self):
+        with pytest.raises(ValueError):
+            EntsoePriceSourceSettings(api_token="t", fetch_hour=24)
 
 
 class TestEnergySettings:

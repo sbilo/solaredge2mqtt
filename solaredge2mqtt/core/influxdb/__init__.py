@@ -88,10 +88,22 @@ class InfluxDBAsync:
         now = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
 
         logger.info("Aggregate powerflow and energy raw data")
-        aggregate_query = self._get_flux_query(
-            "aggregate",
-            {"PRICE_IN": self.prices.price_in, "PRICE_OUT": self.prices.price_out},
-        )
+        if self.prices.is_dynamic:
+            aggregate_query = self._get_flux_query(
+                "aggregate_dynamic_prices",
+                {
+                    "PRICE_IN_DEFAULT": self.prices.price_in,
+                    "PRICE_OUT_DEFAULT": self.prices.price_out,
+                },
+            )
+        else:
+            aggregate_query = self._get_flux_query(
+                "aggregate",
+                {
+                    "PRICE_IN": self.prices.price_in,
+                    "PRICE_OUT": self.prices.price_out,
+                },
+            )
         await self.query_api.query(aggregate_query)
 
         logger.info("Apply retention on raw data")

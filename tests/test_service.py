@@ -24,6 +24,7 @@ def _build_service() -> Service:
     service.powerflow = cast(Any, None)
     service.monitoring = None
     service.weather = None
+    service.prices = None
     return service
 
 
@@ -154,6 +155,7 @@ class TestServiceInitialization:
             patch(
                 "solaredge2mqtt.service.InfluxDBAsync", return_value=influx
             ) as influx_cls,
+            patch("solaredge2mqtt.service.PriceProvider") as price_provider_cls,
             patch("solaredge2mqtt.service.EnergyService") as energy_cls,
             patch("solaredge2mqtt.service.PowerflowService") as powerflow_cls,
             patch("solaredge2mqtt.service.MonitoringSite") as monitoring_cls,
@@ -168,6 +170,9 @@ class TestServiceInitialization:
         timer_cls.assert_called_once_with(event_bus, settings.interval)
         influx_cls.assert_called_once_with(
             settings.influxdb, settings.prices, event_bus
+        )
+        price_provider_cls.assert_called_once_with(
+            settings.prices, event_bus, influx
         )
         energy_cls.assert_called_once_with(settings.energy, event_bus, influx)
         powerflow_cls.assert_called_once_with(settings, event_bus, influx)
@@ -194,6 +199,7 @@ class TestServiceInitialization:
             patch("solaredge2mqtt.service.initialize_logging"),
             patch("solaredge2mqtt.service.EventBus", return_value=MagicMock()),
             patch("solaredge2mqtt.service.Timer"),
+            patch("solaredge2mqtt.service.PriceProvider"),
             patch("solaredge2mqtt.service.PowerflowService"),
             patch("solaredge2mqtt.service.FORECAST_AVAILABLE", False),
             patch("solaredge2mqtt.service.logger") as mock_logger,
@@ -225,6 +231,7 @@ class TestServiceInitialization:
             patch("solaredge2mqtt.service.initialize_logging"),
             patch("solaredge2mqtt.service.EventBus", return_value=MagicMock()),
             patch("solaredge2mqtt.service.Timer"),
+            patch("solaredge2mqtt.service.PriceProvider"),
             patch("solaredge2mqtt.service.PowerflowService"),
             patch("solaredge2mqtt.service.FORECAST_AVAILABLE", False),
             patch("solaredge2mqtt.service.logger") as mock_logger,
@@ -686,6 +693,7 @@ class TestServiceShutdown:
         service.powerflow = cast(Any, None)
         service.monitoring = None
         service.weather = None
+        service.prices = None
 
         with (
             patch(
