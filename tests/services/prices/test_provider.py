@@ -10,7 +10,6 @@ from solaredge2mqtt.services.energy.settings import (
 )
 from solaredge2mqtt.services.prices.provider import PriceProvider
 
-
 ENTSOE_DYNAMIC = {
     "consumption": 0.30,
     "delivery": 0.08,

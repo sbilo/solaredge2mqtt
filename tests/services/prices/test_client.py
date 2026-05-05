@@ -10,10 +10,12 @@ from solaredge2mqtt.services.prices.client import (
     parse_day_ahead_xml,
 )
 
+_NS = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
+
 
 def _xml(points_xml: str, start: str = "2026-04-29T22:00Z") -> str:
     return f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<Publication_MarketDocument xmlns=\"urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3\">
+<Publication_MarketDocument xmlns=\"{_NS}\">
   <TimeSeries>
     <Period>
       <timeInterval>
@@ -29,7 +31,10 @@ def _xml(points_xml: str, start: str = "2026-04-29T22:00Z") -> str:
 
 
 def _point(position: int, amount: float) -> str:
-    return f"<Point><position>{position}</position><price.amount>{amount}</price.amount></Point>"
+    return (
+        f"<Point><position>{position}</position>"
+        f"<price.amount>{amount}</price.amount></Point>"
+    )
 
 
 def test_parse_dense_24h_period_returns_hourly_map():

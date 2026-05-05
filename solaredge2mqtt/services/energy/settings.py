@@ -47,7 +47,8 @@ class PriceSourceSettings(BaseModel):
     def _validate_source(self) -> "PriceSourceSettings":
         if self.type == PriceSourceType.ENTSOE and self.entsoe is None:
             raise ValueError(
-                "prices.source.type is 'entsoe' but prices.source.entsoe is not configured"
+                "prices.source.type is 'entsoe' but "
+                "prices.source.entsoe is not configured"
             )
         return self
 

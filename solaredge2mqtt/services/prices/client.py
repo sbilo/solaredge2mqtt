@@ -100,7 +100,10 @@ def parse_day_ahead_xml(body: str) -> dict[datetime, float]:
             last_price: float | None = None
             points = sorted(
                 (
-                    (int(_find_text(p, "position") or "0"), _find_text(p, "price.amount"))
+                    (
+                        int(_find_text(p, "position") or "0"),
+                        _find_text(p, "price.amount"),
+                    )
                     for p in _iter_local(period, "Point")
                 ),
                 key=lambda item: item[0],
