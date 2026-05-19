@@ -3,11 +3,19 @@
 // has no `prices` row we fall back to the configured static defaults so that
 // money fields stay continuous.
 
+import "array"
 import "date"
 import "join"
 
 stopTime = date.truncate(t: now(), unit: 1h)
 startTime = date.sub(from: stopTime, d: 2h)
+
+// join.left errors with "cannot join on an empty table" when its right side
+// has zero rows (e.g. before the day's prices have been fetched). Anchor the
+// price tables with a sentinel row outside the energy window so the right
+// side is never empty; the `if exists` guards below still fall back to the
+// configured default for any energy hour without a real price match.
+anchorTime = date.sub(from: startTime, d: 1h)
 
 bucket = "{{BUCKET_NAME}}"
 
@@ -50,17 +58,25 @@ energy = power
     |> map(fn: (r) => ({r with _time: date.truncate(t: date.sub(from: r._time, d: 1s), unit: 1h)}))
     |> to(bucket: bucket)
 
-prices_in = from(bucket: bucket)
-    |> range(start: startTime)
-    |> filter(fn: (r) => r._measurement == "prices" and r._field == "price_in")
-    |> keep(columns: ["_time", "_value"])
-    |> rename(columns: {_value: "price_in"})
+prices_in =
+    union(tables: [
+        from(bucket: bucket)
+            |> range(start: startTime)
+            |> filter(fn: (r) => r._measurement == "prices" and r._field == "price_in")
+            |> keep(columns: ["_time", "_value"])
+            |> rename(columns: {_value: "price_in"}),
+        array.from(rows: [{_time: anchorTime, price_in: {{PRICE_IN_DEFAULT}}}]),
+    ])
 
-prices_out = from(bucket: bucket)
-    |> range(start: startTime)
-    |> filter(fn: (r) => r._measurement == "prices" and r._field == "price_out")
-    |> keep(columns: ["_time", "_value"])
-    |> rename(columns: {_value: "price_out"})
+prices_out =
+    union(tables: [
+        from(bucket: bucket)
+            |> range(start: startTime)
+            |> filter(fn: (r) => r._measurement == "prices" and r._field == "price_out")
+            |> keep(columns: ["_time", "_value"])
+            |> rename(columns: {_value: "price_out"}),
+        array.from(rows: [{_time: anchorTime, price_out: {{PRICE_OUT_DEFAULT}}}]),
+    ])
 
 energy_with_in = join.left(
     left: energy,
