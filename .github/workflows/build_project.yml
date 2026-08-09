@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [main, deploy/mqtt-certs]
   pull_request:
     branches: main
   release:
